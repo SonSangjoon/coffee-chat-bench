@@ -25,7 +25,9 @@ describe("benchmark schema contracts", () => {
     const publicSchema = readSchema("taste-episode.public.schema.json");
 
     assert.equal(publicSchema.required.includes("sealed_judgment"), false);
+    assert.equal(publicSchema.required.includes("evaluation_split"), false);
     assert.equal("sealed_judgment" in publicSchema.properties, false);
+    assert.equal("pair" in publicSchema.properties, false);
   });
 
   it("declares the generic report case shape instead of accepting arbitrary case objects", () => {

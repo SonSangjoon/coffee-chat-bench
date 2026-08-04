@@ -61,7 +61,7 @@ export function tasteEpisodeToEvalCase(episode: TasteEpisode): EvalCase {
         scale: { min: 0, max: 1 },
       },
     ],
-    evaluation_methods: ["deterministic", "semantic", "pairwise"],
+    evaluation_methods: ["deterministic", "semantic"],
   };
 }
 

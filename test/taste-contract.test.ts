@@ -96,8 +96,9 @@ describe("Taste episode contract", () => {
 
     const publicEpisode = toPublicTasteEpisode(episode);
     assert.equal("sealed_judgment" in publicEpisode, false);
+    assert.equal("pair" in publicEpisode, false);
+    assert.equal("evaluation_split" in publicEpisode, false);
     assert.equal(publicEpisode.episode_id, episode.episode_id);
-    assert.equal(publicEpisode.evaluation_split, "public");
     assert.deepEqual(publicEpisode.candidates, episode.candidates);
   });
 

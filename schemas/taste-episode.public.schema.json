@@ -8,7 +8,6 @@
     "schema_version",
     "suite_version",
     "episode_id",
-    "evaluation_split",
     "capability",
     "task",
     "context",
@@ -25,7 +24,6 @@
       "type": "string",
       "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
     },
-    "evaluation_split": { "enum": ["public", "held-out", "sealed"] },
     "capability": { "type": "string", "minLength": 1 },
     "task": { "type": "string", "minLength": 1 },
     "context": {},
@@ -51,8 +49,7 @@
       "minItems": 1,
       "items": { "$ref": "#/$defs/action" },
       "uniqueItems": true
-    },
-    "pair": { "$ref": "#/$defs/pair" }
+    }
   },
   "$defs": {
     "evidence": {

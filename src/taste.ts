@@ -141,12 +141,20 @@ export type TasteEpisode = {
   sealed_judgment: TasteJudgmentPackage;
 };
 
-export type PublicTasteEpisode = Omit<TasteEpisode, "sealed_judgment">;
+export type PublicTasteEpisode = Omit<
+  TasteEpisode,
+  "sealed_judgment" | "pair" | "evaluation_split"
+>;
 
 export function toPublicTasteEpisode(
   episode: TasteEpisode,
 ): PublicTasteEpisode {
-  const { sealed_judgment: _sealedJudgment, ...publicEpisode } = episode;
+  const {
+    sealed_judgment: _sealedJudgment,
+    pair: _pair,
+    evaluation_split: _evaluationSplit,
+    ...publicEpisode
+  } = episode;
   return publicEpisode;
 }
 
