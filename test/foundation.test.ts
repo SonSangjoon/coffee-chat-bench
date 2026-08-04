@@ -14,7 +14,7 @@ const baseCase: EvalCase = {
   task: "Produce a source-grounded perspective.",
   starting_context: { available_sources: ["source-a"] },
   explicit_inputs: { question: "What matters here?" },
-  declared_evidence: [{ source_id: "source-a", content: "The source." }],
+  declared_evidence: [{ source_id: "source-a", claim: "The source." }],
   expected_capabilities: ["evidence-grounded-synthesis"],
   forbidden_behaviors: ["write-personal-record"],
   allowed_actions: ["read-source"],
@@ -124,6 +124,7 @@ describe("generic evaluation runner", () => {
     assert.equal(result.status, "failed");
     assert.equal(cleaned, true);
     assert.equal(result.failure?.code, "candidate-invocation-failed");
+    assert.equal(result.output, null);
   });
 
   it("reports dirty cleanup as a deterministic failure", async () => {

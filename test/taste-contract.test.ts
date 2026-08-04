@@ -100,6 +100,9 @@ describe("Taste episode contract", () => {
     assert.equal("evaluation_split" in publicEpisode, false);
     assert.equal(publicEpisode.episode_id, episode.episode_id);
     assert.deepEqual(publicEpisode.candidates, episode.candidates);
+
+    publicEpisode.candidates[0].label = "mutated by candidate";
+    assert.equal(episode.candidates[0].label, "Option A");
   });
 
   it("requires the fields implied by each decision action", () => {
@@ -234,6 +237,20 @@ describe("Taste episode contract", () => {
         ),
       /criterion must be non-empty when provided/,
     );
+    assert.throws(
+      () =>
+        validateTasteDecision(
+          {
+            action: "hold",
+            criterion_tags: [],
+            evidence_refs: ["target-1"],
+            question: "",
+          } as TasteDecision,
+          ["candidate-a", "candidate-b"],
+          new Set(["target-1"]),
+        ),
+      /hold decisions must not include candidate ids or question/,
+    );
   });
 
   it("rejects candidate evidence that is not declared by the episode", () => {
@@ -298,6 +315,12 @@ describe("Taste episode contract", () => {
     const invalidClaim = structuredClone(episode);
     invalidClaim.factual_evidence[0].claim = "";
     assert.throws(() => validateTasteEpisode(invalidClaim), /evidence claim is required/);
+
+    const missingContext = structuredClone(episode) as TasteEpisode & {
+      context?: unknown;
+    };
+    delete missingContext.context;
+    assert.throws(() => validateTasteEpisode(missingContext), /context is required/);
 
     const invalidUncertainty = structuredClone(episode) as TasteEpisode & {
       sealed_judgment: { acceptable_decisions: Array<{ decision: TasteDecision }> };

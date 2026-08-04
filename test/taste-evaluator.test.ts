@@ -75,6 +75,7 @@ describe("Taste metric evaluator", () => {
     assert.equal(evaluation.dimensions.criterion.score, 1);
     assert.equal(evaluation.dimensions.evidence_support.score, 1);
     assert.equal(evaluation.dimensions.utility.score, 0.9);
+    assert.equal(evaluation.dimensions.utility_surface.score, 0.8);
     assert.ok(Math.abs(evaluation.dimensions.viewpoint_lift.score - 0.3) < 1e-9);
   });
 
@@ -84,8 +85,45 @@ describe("Taste metric evaluator", () => {
     });
 
     assert.equal(evaluation.dimensions.selection.score, 0);
+    assert.ok(evaluation.dimensions.evidence_support.score < 1);
     assert.ok(evaluation.dimensions.viewpoint_lift.score < 0.1);
     assert.ok(evaluation.dimensions.utility.score < 0.9);
+  });
+
+  it("keeps selection and exclusion as separate facets", () => {
+    const selectionWithoutExclusion: TasteDecision = {
+      ...selectedA,
+      excluded_ids: undefined,
+    };
+    const evaluation = evaluateTasteDecision(
+      makeEpisode(),
+      selectionWithoutExclusion,
+    );
+
+    assert.equal(evaluation.dimensions.selection.score, 1);
+    assert.equal(evaluation.dimensions.exclusion.score, 0);
+  });
+
+  it("does not silently score an unmeasured control lift as zero", () => {
+    const evaluation = evaluateTasteDecision(makeEpisode(), selectedA);
+
+    assert.equal(evaluation.dimensions.viewpoint_lift.measured, false);
+  });
+
+  it("rejects a decision action outside the episode contract", () => {
+    const restricted = makeEpisode();
+    restricted.allowed_actions = ["select"];
+    const rank: TasteDecision = {
+      action: "rank",
+      ordered_ids: ["a", "b"],
+      criterion_tags: ["quiet-detail"],
+      evidence_refs: ["target-1", "fact-a"],
+    };
+
+    assert.throws(
+      () => evaluateTasteDecision(restricted, rank),
+      /sealed decision action rank is not allowed/,
+    );
   });
 
   it("treats a justified hold as a valid decision instead of a missing selection", () => {
@@ -130,8 +168,17 @@ describe("Taste metric evaluator", () => {
       }),
       decision: selectedB,
     };
+    const sensitivityAnchor = {
+      episode: makeEpisode(selectedA, {
+        pair_id: "pair-1",
+        role: "anchor",
+        perturbation: "none",
+        expected_relation: "different-decision",
+      }),
+      decision: selectedA,
+    };
 
     assert.equal(evaluateTasteContrast(anchor, irrelevant).score, 1);
-    assert.equal(evaluateTasteContrast(anchor, relevant).score, 1);
+    assert.equal(evaluateTasteContrast(sensitivityAnchor, relevant).score, 1);
   });
 });

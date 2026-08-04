@@ -84,6 +84,7 @@ export type SemanticDimension = {
   score: number;
   max: number;
   rationale: string;
+  measured?: boolean;
 };
 
 export type SemanticResult =
@@ -218,7 +219,7 @@ export async function runEvaluationCase(
     },
     status:
       failure || deterministic.failed.length > 0 ? "failed" : "passed",
-    output,
+    output: output === undefined ? null : output,
     evidence,
     actions,
     trace,
@@ -285,7 +286,7 @@ export async function runEvaluationSuite(
       deterministic_failures: deterministicFailures,
       semantic_failures: semanticFailures,
     },
-    score_vector: aggregateScores(results),
+    score_vector: aggregateScoreVector(results),
   };
 }
 
@@ -407,7 +408,7 @@ function stableHash(value: string): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-function aggregateScores(
+export function aggregateScoreVector(
   results: EvaluationResult[],
 ): EvaluationReport["score_vector"] {
   const values = new Map<
@@ -417,6 +418,7 @@ function aggregateScores(
   for (const result of results) {
     if (result.semantic.status === "not-run") continue;
     for (const [id, dimension] of Object.entries(result.semantic.dimensions)) {
+      if (dimension.measured === false) continue;
       const current = values.get(id) ?? {
         total: 0,
         max: dimension.max,

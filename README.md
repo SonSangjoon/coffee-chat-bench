@@ -23,9 +23,12 @@ selection** through a candidate-agnostic contract:
 - `src/taste.ts` defines factually supported candidates, target evidence,
   controls, select/rank/exclude/hold/ask decisions, and sealed judgment data.
 - `src/taste-evaluator.ts` reports selection, exclusion, hold/ask, criterion,
-  evidence support, utility, and viewpoint-lift dimensions separately.
-- `src/taste-runner.ts` projects sealed episodes into public generic cases and
-  runs them through the existing lifecycle runner.
+  evidence support, utility, utility-surface, viewpoint-lift, and pairwise
+  contrast dimensions separately. Unavailable control comparisons are marked
+  unmeasured rather than treated as zero.
+- `src/taste-runner.ts` projects sealed episodes into public generic cases,
+  runs them through the existing lifecycle runner, and attaches pairwise
+  invariance/sensitivity scores to the generic report.
 - `src/pilot.ts` contains generic selection, control, hold, contrast, and
   held-out transfer fixtures.
 

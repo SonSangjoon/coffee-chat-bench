@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://coffee-chat.dev/bench/schemas/taste-episode.schema.json",
   "title": "Viewpoint-Conditioned Taste Episode",
+  "$comment": "Runtime validation additionally enforces unique candidate_id/source_id keys and complete score maps, which standard JSON Schema cannot express generically for arrays and maps.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -21,14 +22,14 @@
   ],
   "properties": {
     "schema_version": { "const": "1.0.0" },
-    "suite_version": { "type": "string", "minLength": 1 },
+    "suite_version": { "type": "string", "minLength": 1, "pattern": "\\S" },
     "episode_id": {
       "type": "string",
       "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
     },
     "evaluation_split": { "enum": ["public", "held-out", "sealed"] },
-    "capability": { "type": "string", "minLength": 1 },
-    "task": { "type": "string", "minLength": 1 },
+    "capability": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "task": { "type": "string", "minLength": 1, "pattern": "\\S" },
     "context": {},
     "factual_evidence": {
       "type": "array",
@@ -62,8 +63,8 @@
       "additionalProperties": false,
       "required": ["source_id", "claim"],
       "properties": {
-        "source_id": { "type": "string", "minLength": 1 },
-        "claim": { "type": "string", "minLength": 1 }
+        "source_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "claim": { "type": "string", "minLength": 1, "pattern": "\\S" }
       }
     },
     "candidate": {
@@ -71,12 +72,12 @@
       "additionalProperties": false,
       "required": ["candidate_id", "label", "evidence_refs"],
       "properties": {
-        "candidate_id": { "type": "string", "minLength": 1 },
-        "label": { "type": "string", "minLength": 1 },
+        "candidate_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "label": { "type": "string", "minLength": 1, "pattern": "\\S" },
         "evidence_refs": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string", "minLength": 1 },
+          "items": { "type": "string", "minLength": 1, "pattern": "\\S" },
           "uniqueItems": true
         },
         "attributes": {}
@@ -97,7 +98,7 @@
       "required": ["condition"],
       "properties": {
         "condition": { "$ref": "#/$defs/condition" },
-        "matched_case_id": { "type": "string", "minLength": 1 },
+        "matched_case_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
         "evidence_budget": { "type": "integer", "minimum": 0 }
       }
     },
@@ -113,19 +114,19 @@
         "selected_ids": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string", "minLength": 1 },
+          "items": { "type": "string", "minLength": 1, "pattern": "\\S" },
           "uniqueItems": true
         },
         "excluded_ids": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string", "minLength": 1 },
+          "items": { "type": "string", "minLength": 1, "pattern": "\\S" },
           "uniqueItems": true
         },
         "ordered_ids": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string", "minLength": 1 },
+          "items": { "type": "string", "minLength": 1, "pattern": "\\S" },
           "uniqueItems": true
         },
         "criterion_tags": {
@@ -133,11 +134,11 @@
           "items": { "type": "string", "minLength": 1 },
           "uniqueItems": true
         },
-        "criterion": { "type": "string", "minLength": 1 },
+        "criterion": { "type": "string", "minLength": 1, "pattern": "\\S" },
         "evidence_refs": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string", "minLength": 1 },
+          "items": { "type": "string", "minLength": 1, "pattern": "\\S" },
           "uniqueItems": true
         },
         "uncertainty": {
@@ -146,11 +147,11 @@
           "required": ["level"],
           "properties": {
             "level": { "enum": ["low", "medium", "high"] },
-            "note": { "type": "string", "minLength": 1 }
+            "note": { "type": "string", "minLength": 1, "pattern": "\\S" }
           }
         },
-        "question": { "type": "string", "minLength": 1 },
-        "rationale": { "type": "string", "minLength": 1 }
+        "question": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "rationale": { "type": "string", "minLength": 1, "pattern": "\\S" }
       },
       "allOf": [
         {
@@ -188,7 +189,7 @@
       "additionalProperties": false,
       "required": ["pair_id", "role", "perturbation", "expected_relation"],
       "properties": {
-        "pair_id": { "type": "string", "minLength": 1 },
+        "pair_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
         "role": { "enum": ["anchor", "contrast"] },
         "perturbation": { "enum": ["none", "irrelevant", "decision-relevant"] },
         "expected_relation": { "enum": ["same-decision", "different-decision", "independent"] }
@@ -199,7 +200,7 @@
       "additionalProperties": false,
       "required": ["decision_id", "decision", "utility"],
       "properties": {
-        "decision_id": { "type": "string", "minLength": 1 },
+        "decision_id": { "type": "string", "minLength": 1, "pattern": "\\S" },
         "decision": { "$ref": "#/$defs/decision" },
         "utility": { "type": "number", "minimum": 0, "maximum": 1 }
       }

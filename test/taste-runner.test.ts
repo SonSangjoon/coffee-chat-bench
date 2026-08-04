@@ -61,6 +61,10 @@ describe("Taste runner integration", () => {
     });
 
     assert.equal("sealed_judgment" in (observedInput as object), false);
+    assert.equal(
+      JSON.stringify(testCase.quality_rubric).includes("viewpoint_lift"),
+      false,
+    );
     assert.equal(result.semantic.status, "passed");
     if (result.semantic.status === "passed") {
       assert.ok(Math.abs(result.semantic.dimensions.viewpoint_lift.score - 0.3) < 1e-9);
@@ -124,5 +128,61 @@ describe("Taste runner integration", () => {
     assert.equal(report.status, "passed");
     assert.equal(report.score_vector.selection.cases, 3);
     assert.equal(report.score_vector.viewpoint_lift.cases, 3);
+  });
+
+  it("adds pairwise invariance and sensitivity to the generic report", async () => {
+    const episodes = PILOT_EPISODES.filter(({ episode_id }) =>
+      [
+        "pilot-invariance-anchor",
+        "pilot-invariance-contrast",
+        "pilot-sensitivity-anchor",
+        "pilot-sensitivity-contrast",
+      ].includes(episode_id),
+    );
+    const decisions = new Map(
+      episodes.map((candidateEpisode) => [
+        candidateEpisode.episode_id,
+        candidateEpisode.sealed_judgment.acceptable_decisions[0].decision,
+      ]),
+    );
+    let currentCaseId = "";
+    const adapter: CandidateAdapter = {
+      adapter_version: "pair-fixture-0.1.0",
+      candidate_identity: {
+        candidate_id: "pair-fixture",
+        version: "0.1.0",
+        source_ref: "fixture",
+      },
+      async prepare(candidateCase) {
+        currentCaseId = candidateCase.case_id;
+        return { case_id: currentCaseId, sandbox_id: currentCaseId };
+      },
+      async invoke() {
+        return { handle_id: currentCaseId };
+      },
+      async collect_output() {
+        return decisions.get(currentCaseId);
+      },
+      async collect_evidence() {
+        return [];
+      },
+      async collect_actions() {
+        return [];
+      },
+      async collect_trace() {
+        return [{ type: "decision", detail: currentCaseId }];
+      },
+      async cleanup() {
+        return { status: "clean" };
+      },
+    };
+
+    const report = await runTasteSuite(episodes, adapter, {
+      run_id: "pair-fixture-run",
+      extractDecision: (output) => output as TasteDecision,
+    });
+
+    assert.equal(report.score_vector.pairwise.cases, 2);
+    assert.equal(report.score_vector.pairwise.mean, 1);
   });
 });

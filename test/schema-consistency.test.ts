@@ -36,6 +36,66 @@ describe("benchmark schema contracts", () => {
       $ref: "#/$defs/evaluation_result",
     });
     assert.equal("evaluation_result" in schema.$defs, true);
+    assert.equal(schema.$defs.semantic_dimension.properties.measured.type, "boolean");
+  });
+
+  it("serializes failed results with explicit null output", () => {
+    const schema = readSchema("eval-report.schema.json");
+    const ajv = new Ajv({ strict: false });
+    const valid = ajv.compile(schema);
+    const report = {
+      schema_version: "1.0.0",
+      run_id: "failed-run",
+      suite_version: "0.1.0",
+      candidate: {
+        candidate_id: "fixture",
+        version: "0.1.0",
+        source_ref: "fixture",
+        adapter_version: "0.1.0",
+      },
+      status: "failed",
+      execution_order: ["failed-case"],
+      cases: [
+        {
+          schema_version: "1.0.0",
+          case_id: "failed-case",
+          candidate: {
+            candidate_id: "fixture",
+            version: "0.1.0",
+            source_ref: "fixture",
+            adapter_version: "0.1.0",
+          },
+          status: "failed",
+          output: null,
+          evidence: [],
+          actions: [],
+          trace: [],
+          deterministic: { passed: [], failed: [] },
+          semantic: {
+            status: "passed",
+            dimensions: {
+              viewpoint_lift: {
+                score: 0,
+                max: 1,
+                measured: false,
+                rationale: "Control not supplied.",
+              },
+            },
+          },
+          cleanup: { status: "clean" },
+        },
+      ],
+      summary: {
+        total: 1,
+        passed: 0,
+        failed: 1,
+        deterministic_failures: 0,
+        semantic_failures: 0,
+      },
+      score_vector: {},
+    };
+
+    assert.equal(valid(report), true, JSON.stringify(ajv.errors));
   });
 
   it("validates representative full and public Taste episodes against their schemas", () => {

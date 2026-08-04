@@ -155,7 +155,9 @@ export function toPublicTasteEpisode(
     evaluation_split: _evaluationSplit,
     ...publicEpisode
   } = episode;
-  return publicEpisode;
+  // Candidate adapters may run in-process during tests. Do not let a mutable
+  // public projection share nested arrays/objects with evaluator-side gold.
+  return JSON.parse(JSON.stringify(publicEpisode)) as PublicTasteEpisode;
 }
 
 export function validateTasteEpisode(episode: TasteEpisode): void {
@@ -183,6 +185,7 @@ export function validateTasteEpisode(episode: TasteEpisode): void {
   requireText(episode.suite_version, "suite_version");
   requireText(episode.capability, "capability");
   requireText(episode.task, "task");
+  if (episode.context === undefined) throw new Error("context is required");
 
   if (episode.schema_version !== "1.0.0") {
     throw new Error("schema_version must be 1.0.0");
@@ -264,8 +267,8 @@ export function validateTasteEpisode(episode: TasteEpisode): void {
     throw new Error("control evidence_budget must be a non-negative integer");
   }
 
-  const allowedActions = uniqueText(episode.allowed_actions, "allowed action");
-  for (const action of allowedActions) {
+  uniqueText(episode.allowed_actions, "allowed action");
+  for (const action of episode.allowed_actions) {
     if (!TASTE_DECISION_ACTIONS.includes(action as TasteDecisionAction)) {
       throw new Error(`unsupported decision action ${action}`);
     }
@@ -281,6 +284,10 @@ export function validateTasteEpisode(episode: TasteEpisode): void {
   if (episode.sealed_judgment.acceptable_decisions.length === 0) {
     throw new Error("sealed_judgment must contain an acceptable decision");
   }
+  uniqueText(
+    episode.sealed_judgment.acceptable_decisions.map(({ decision_id }) => decision_id),
+    "acceptable decision_id",
+  );
   for (const acceptable of episode.sealed_judgment.acceptable_decisions) {
     assertKnownKeys(
       acceptable,
@@ -293,7 +300,7 @@ export function validateTasteEpisode(episode: TasteEpisode): void {
       acceptable.decision,
       candidateIds,
       declaredEvidenceIds,
-      new Set(allowedActions),
+      new Set<TasteDecisionAction>(episode.allowed_actions),
     );
   }
   validateTagList(episode.sealed_judgment.criterion_tags, "criterion_tags");
@@ -366,24 +373,37 @@ export function validateTasteDecision(
     if (decision.excluded_ids !== undefined) {
       validateIds(decision.excluded_ids, "excluded_ids");
     }
-    if (decision.ordered_ids || decision.question) {
+    if (decision.ordered_ids || decision.question !== undefined) {
       throw new Error("select decisions must not include ordered_ids or question");
     }
   }
   if (decision.action === "rank") {
     validateIds(decision.ordered_ids, "ordered_ids");
-    if (decision.selected_ids || decision.excluded_ids || decision.question) {
+    if (
+      decision.selected_ids ||
+      decision.excluded_ids ||
+      decision.question !== undefined
+    ) {
       throw new Error("rank decisions must not include selected, excluded, or question fields");
     }
   }
   if (decision.action === "exclude") {
     validateIds(decision.excluded_ids, "excluded_ids");
-    if (decision.selected_ids || decision.ordered_ids || decision.question) {
+    if (
+      decision.selected_ids ||
+      decision.ordered_ids ||
+      decision.question !== undefined
+    ) {
       throw new Error("exclude decisions must not include selected, ordered, or question fields");
     }
   }
   if (decision.action === "hold") {
-    if (decision.selected_ids || decision.excluded_ids || decision.ordered_ids || decision.question) {
+    if (
+      decision.selected_ids ||
+      decision.excluded_ids ||
+      decision.ordered_ids ||
+      decision.question !== undefined
+    ) {
       throw new Error("hold decisions must not include candidate ids or question");
     }
   }
@@ -441,6 +461,11 @@ function validateCandidateScores(
   candidateIds: string[],
   field: string,
 ): void {
+  for (const candidateId of candidateIds) {
+    if (!Object.prototype.hasOwnProperty.call(scores, candidateId)) {
+      throw new Error(`${field} is missing candidate ${candidateId}`);
+    }
+  }
   for (const [candidateId, score] of Object.entries(scores)) {
     if (!candidateIds.includes(candidateId)) {
       throw new Error(`${field} references unknown candidate ${candidateId}`);

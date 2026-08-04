@@ -118,10 +118,11 @@
       "additionalProperties": false,
       "required": ["score", "max", "rationale"],
       "properties": {
-        "score": { "type": "number" },
-        "max": { "type": "number" },
-        "rationale": { "type": "string", "minLength": 1 }
-      }
+            "score": { "type": "number" },
+            "max": { "type": "number" },
+            "rationale": { "type": "string", "minLength": 1 },
+            "measured": { "type": "boolean" }
+          }
     },
     "semantic": {
       "oneOf": [

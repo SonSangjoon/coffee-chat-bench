@@ -9,6 +9,7 @@ export type TasteMetricDimension = {
   score: number;
   max: number;
   rationale: string;
+  measured?: boolean;
 };
 
 export type TasteDecisionEvaluation = {
@@ -20,6 +21,7 @@ export type TasteDecisionEvaluation = {
     criterion: TasteMetricDimension;
     evidence_support: TasteMetricDimension;
     utility: TasteMetricDimension;
+    utility_surface: TasteMetricDimension;
     viewpoint_lift: TasteMetricDimension;
   };
 };
@@ -42,6 +44,14 @@ export function evaluateTasteDecision(
   options: TasteDecisionEvaluationOptions = {},
 ): TasteDecisionEvaluation {
   validateTasteEpisode(episode);
+  if (
+    options.matched_control_utility !== undefined &&
+    (!Number.isFinite(options.matched_control_utility) ||
+      options.matched_control_utility < 0 ||
+      options.matched_control_utility > 1)
+  ) {
+    throw new Error("matched_control_utility must be between 0 and 1");
+  }
   validateTasteDecision(
     decision,
     episode.candidates.map(({ candidate_id }) => candidate_id),
@@ -49,6 +59,7 @@ export function evaluateTasteDecision(
       ...episode.factual_evidence.map(({ source_id }) => source_id),
       ...episode.target_evidence.map(({ source_id }) => source_id),
     ]),
+    new Set(episode.allowed_actions),
   );
 
   const match = bestAcceptableMatch(episode, decision);
@@ -60,23 +71,17 @@ export function evaluateTasteDecision(
   const holdAskScore = expectedHoldAsk === candidateHoldAsk ? 1 : 0;
   const expectedTags = episode.sealed_judgment.criterion_tags;
   const criterionScore = f1(decision.criterion_tags, expectedTags);
-  const declaredEvidence = new Set([
-    ...episode.factual_evidence.map(({ source_id }) => source_id),
-    ...episode.target_evidence.map(({ source_id }) => source_id),
-  ]);
-  const evidenceSupport =
-    decision.evidence_refs.length === 0
-      ? 0
-      : decision.evidence_refs.filter((reference) =>
-          declaredEvidence.has(reference),
-        ).length / decision.evidence_refs.length;
+  const selectionMatch = bestSelectionSimilarity(episode, decision);
+  const evidenceSupport = bestEvidenceSupport(episode, decision);
   const utility = match.utility * match.similarity;
+  const utilitySurface = estimateUtilitySurface(episode, decision);
 
   const viewpointLift =
     options.matched_control_utility === undefined
       ? {
           score: 0,
           max: 1,
+          measured: false,
           rationale: "No matched control utility was supplied.",
         }
       : {
@@ -89,9 +94,9 @@ export function evaluateTasteDecision(
     episode_id: episode.episode_id,
     dimensions: {
       selection: {
-        score: match.similarity,
+        score: selectionMatch.score,
         max: 1,
-        rationale: match.rationale,
+        rationale: selectionMatch.rationale,
       },
       exclusion: {
         score: bestExclusionSimilarity(episode, decision),
@@ -120,6 +125,7 @@ export function evaluateTasteDecision(
         max: 1,
         rationale: "Best acceptable-decision utility weighted by decision similarity.",
       },
+      utility_surface: utilitySurface,
       viewpoint_lift: viewpointLift,
     },
   };
@@ -137,15 +143,26 @@ export function evaluateTasteContrast(
   if (left.episode.pair.pair_id !== right.episode.pair.pair_id) {
     throw new Error("contrast episodes must share pair_id");
   }
+  if (left.episode.pair.role !== "anchor" || right.episode.pair.role !== "contrast") {
+    throw new Error("contrast episodes must be ordered as anchor then contrast");
+  }
+  if (
+    left.episode.pair.expected_relation !==
+    right.episode.pair.expected_relation
+  ) {
+    throw new Error("contrast episodes must share expected_relation");
+  }
   validateTasteDecision(
     left.decision,
     left.episode.candidates.map(({ candidate_id }) => candidate_id),
     episodeEvidenceIds(left.episode),
+    new Set(left.episode.allowed_actions),
   );
   validateTasteDecision(
     right.decision,
     right.episode.candidates.map(({ candidate_id }) => candidate_id),
     episodeEvidenceIds(right.episode),
+    new Set(right.episode.allowed_actions),
   );
 
   const same = decisionsEquivalent(left.decision, right.decision);
@@ -212,6 +229,84 @@ function bestExclusionSimilarity(
   );
 }
 
+function bestSelectionSimilarity(
+  episode: TasteEpisode,
+  decision: TasteDecision,
+): { score: number; rationale: string } {
+  let best = 0;
+  let bestDecisionId = "";
+  for (const acceptable of episode.sealed_judgment.acceptable_decisions) {
+    if (decision.action !== acceptable.decision.action) continue;
+    const score = substantiveDecisionSimilarity(decision, acceptable.decision);
+    if (score > best) {
+      best = score;
+      bestDecisionId = acceptable.decision_id;
+    }
+  }
+  return {
+    score: best,
+    rationale: bestDecisionId
+      ? `Best substantive decision match is ${bestDecisionId} at similarity ${best.toFixed(3)}.`
+      : "No acceptable decision with the same action matched.",
+  };
+}
+
+function bestEvidenceSupport(
+  episode: TasteEpisode,
+  decision: TasteDecision,
+): number {
+  return Math.max(
+    ...episode.sealed_judgment.acceptable_decisions.map(({ decision: acceptable }) =>
+      decision.action === acceptable.action
+        ? jaccard(decision.evidence_refs, acceptable.evidence_refs)
+        : 0,
+    ),
+  );
+}
+
+function estimateUtilitySurface(
+  episode: TasteEpisode,
+  decision: TasteDecision,
+): TasteMetricDimension {
+  if (decision.action === "hold" || decision.action === "ask") {
+    return {
+      score: 0,
+      max: 1,
+      measured: false,
+      rationale: "No candidate retention decision was made; restraint is scored by hold_ask.",
+    };
+  }
+
+  const candidateIds = episode.candidates.map(({ candidate_id }) => candidate_id);
+  const retained =
+    decision.action === "select"
+      ? decision.selected_ids
+      : decision.action === "rank"
+        ? decision.ordered_ids
+        : candidateIds.filter(
+            (candidateId) => !decision.excluded_ids.includes(candidateId),
+          );
+  const omitted = candidateIds.filter((candidateId) => !retained.includes(candidateId));
+  const retainedValue = average(
+    retained.map((candidateId) => episode.sealed_judgment.candidate_utility[candidateId]),
+  );
+  const omissionPenalty = average(
+    omitted.map((candidateId) => episode.sealed_judgment.omission_cost[candidateId]),
+  );
+  const score = Math.max(0, Math.min(1, retainedValue - omissionPenalty));
+  return {
+    score,
+    max: 1,
+    rationale: `Mean retained candidate utility ${retainedValue.toFixed(3)} minus mean omitted-candidate cost ${omissionPenalty.toFixed(3)}.`,
+  };
+}
+
+function average(values: number[]): number {
+  return values.length === 0
+    ? 0
+    : values.reduce((total, value) => total + value, 0) / values.length;
+}
+
 function decisionSimilarity(left: TasteDecision, right: TasteDecision): number {
   if (left.action !== right.action) return 0;
   if (left.action === "hold" || left.action === "ask") return 1;
@@ -224,6 +319,21 @@ function decisionSimilarity(left: TasteDecision, right: TasteDecision): number {
     return jaccard(left.excluded_ids ?? [], right.excluded_ids ?? []);
   }
   return orderedOverlap(left.ordered_ids ?? [], right.ordered_ids ?? []);
+}
+
+function substantiveDecisionSimilarity(
+  left: TasteDecision,
+  right: TasteDecision,
+): number {
+  if (left.action !== right.action) return 0;
+  if (left.action === "hold" || left.action === "ask") return 1;
+  if (left.action === "select") {
+    return jaccard(left.selected_ids ?? [], right.selected_ids ?? []);
+  }
+  if (left.action === "rank") {
+    return orderedOverlap(left.ordered_ids ?? [], right.ordered_ids ?? []);
+  }
+  return jaccard(left.excluded_ids ?? [], right.excluded_ids ?? []);
 }
 
 function decisionsEquivalent(left: TasteDecision, right: TasteDecision): boolean {

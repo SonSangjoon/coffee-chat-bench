@@ -15,7 +15,7 @@ const makeCase = (caseId: string, capability: string): EvalCase => ({
   task: `Task ${caseId}`,
   starting_context: {},
   explicit_inputs: { case_id: caseId },
-  declared_evidence: [{ source_id: "source-a", content: "Evidence." }],
+  declared_evidence: [{ source_id: "source-a", claim: "Evidence." }],
   expected_capabilities: [capability],
   forbidden_behaviors: [],
   allowed_actions: ["read-source"],
