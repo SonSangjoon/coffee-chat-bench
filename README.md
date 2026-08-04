@@ -1,2 +1,3 @@
-# coffee-chat-eval
-Evaluation cases, gold examples, judges, and reports for Coffee Chat
+# Coffee Chat Eval
+
+Evaluation repository for [Coffee Chat](https://github.com/SonSangjoon/coffee-chat).
