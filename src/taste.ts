@@ -151,6 +151,26 @@ export function toPublicTasteEpisode(
 }
 
 export function validateTasteEpisode(episode: TasteEpisode): void {
+  assertKnownKeys(
+    episode,
+    [
+      "schema_version",
+      "suite_version",
+      "episode_id",
+      "evaluation_split",
+      "capability",
+      "task",
+      "context",
+      "factual_evidence",
+      "target_evidence",
+      "candidates",
+      "control",
+      "allowed_actions",
+      "pair",
+      "sealed_judgment",
+    ],
+    "episode",
+  );
   requireText(episode.episode_id, "episode_id");
   requireText(episode.suite_version, "suite_version");
   requireText(episode.capability, "capability");
@@ -189,6 +209,11 @@ export function validateTasteEpisode(episode: TasteEpisode): void {
   ]);
 
   for (const candidate of episode.candidates) {
+    assertKnownKeys(
+      candidate,
+      ["candidate_id", "label", "evidence_refs", "attributes"],
+      `candidate ${candidate.candidate_id}`,
+    );
     requireText(candidate.label, `candidate ${candidate.candidate_id} label`);
     if (candidate.evidence_refs.length === 0) {
       throw new Error(
@@ -215,6 +240,14 @@ export function validateTasteEpisode(episode: TasteEpisode): void {
       `unsupported control condition ${episode.control.condition}`,
     );
   }
+  assertKnownKeys(
+    episode.control,
+    ["condition", "matched_case_id", "evidence_budget"],
+    "control",
+  );
+  if (episode.control.matched_case_id !== undefined) {
+    requireText(episode.control.matched_case_id, "matched_case_id");
+  }
   if (
     episode.control.evidence_budget !== undefined &&
     (!Number.isInteger(episode.control.evidence_budget) ||
@@ -232,10 +265,20 @@ export function validateTasteEpisode(episode: TasteEpisode): void {
 
   if (episode.pair) validateTastePair(episode.pair);
 
+  assertKnownKeys(
+    episode.sealed_judgment,
+    ["acceptable_decisions", "criterion_tags", "candidate_utility", "omission_cost"],
+    "sealed_judgment",
+  );
   if (episode.sealed_judgment.acceptable_decisions.length === 0) {
     throw new Error("sealed_judgment must contain an acceptable decision");
   }
   for (const acceptable of episode.sealed_judgment.acceptable_decisions) {
+    assertKnownKeys(
+      acceptable,
+      ["decision_id", "decision", "utility"],
+      "acceptable decision",
+    );
     requireText(acceptable.decision_id, "acceptable decision_id");
     assertUtility(acceptable.utility, "acceptable decision utility");
     validateTasteDecision(
@@ -264,6 +307,22 @@ export function validateTasteDecision(
   declaredEvidenceIds: Set<string>,
   allowedActions?: ReadonlySet<TasteDecisionAction>,
 ): void {
+  assertKnownKeys(
+    decision,
+    [
+      "action",
+      "selected_ids",
+      "excluded_ids",
+      "ordered_ids",
+      "criterion_tags",
+      "criterion",
+      "evidence_refs",
+      "uncertainty",
+      "question",
+      "rationale",
+    ],
+    "decision",
+  );
   if (!TASTE_DECISION_ACTIONS.includes(decision.action)) {
     throw new Error(`unsupported decision action ${decision.action}`);
   }
@@ -296,6 +355,9 @@ export function validateTasteDecision(
 
   if (decision.action === "select") {
     validateIds(decision.selected_ids, "selected_ids");
+    if (decision.excluded_ids !== undefined) {
+      validateIds(decision.excluded_ids, "excluded_ids");
+    }
     if (decision.ordered_ids || decision.question) {
       throw new Error("select decisions must not include ordered_ids or question");
     }
@@ -323,8 +385,17 @@ export function validateTasteDecision(
       throw new Error("ask decisions must not include candidate ids");
     }
   }
-  if (decision.uncertainty && !["low", "medium", "high"].includes(decision.uncertainty.level)) {
-    throw new Error("uncertainty level must be low, medium, or high");
+  if (decision.uncertainty) {
+    assertKnownKeys(decision.uncertainty, ["level", "note"], "uncertainty");
+    if (!["low", "medium", "high"].includes(decision.uncertainty.level)) {
+      throw new Error("uncertainty level must be low, medium, or high");
+    }
+  }
+  if (decision.criterion !== undefined && !decision.criterion.trim()) {
+    throw new Error("criterion must be non-empty when provided");
+  }
+  if (decision.rationale !== undefined && !decision.rationale.trim()) {
+    throw new Error("rationale must be non-empty when provided");
   }
   if (decision.uncertainty?.note !== undefined) {
     requireText(decision.uncertainty.note, "uncertainty note");
@@ -332,6 +403,11 @@ export function validateTasteDecision(
 }
 
 function validateTastePair(pair: TastePair): void {
+  assertKnownKeys(
+    pair,
+    ["pair_id", "role", "perturbation", "expected_relation"],
+    "pair",
+  );
   requireText(pair.pair_id, "pair_id");
   if (!["anchor", "contrast"].includes(pair.role)) {
     throw new Error(`unsupported pair role ${pair.role}`);
@@ -346,6 +422,7 @@ function validateTastePair(pair: TastePair): void {
 
 function validateEvidence(evidence: Evidence[]): void {
   for (const item of evidence) {
+    assertKnownKeys(item, ["source_id", "claim"], "evidence");
     requireText(item.source_id, "evidence source_id");
     requireText(item.claim, "evidence claim");
   }
@@ -383,4 +460,17 @@ function uniqueText(values: string[], field: string): string[] {
 
 function requireText(value: string | undefined, field: string): void {
   if (!value?.trim()) throw new Error(`${field} is required`);
+}
+
+function assertKnownKeys(
+  value: object,
+  allowed: string[],
+  field: string,
+): void {
+  const allowedKeys = new Set(allowed);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`${field} contains unknown property ${key}`);
+    }
+  }
 }

@@ -172,6 +172,67 @@ describe("Taste episode contract", () => {
         ),
       /hold decisions must not include candidate ids/,
     );
+    assert.throws(
+      () =>
+        validateTasteDecision(
+          {
+            action: "select",
+            selected_ids: ["candidate-a"],
+            excluded_ids: [],
+            criterion_tags: [],
+            evidence_refs: ["fact-a"],
+          },
+          ["candidate-a", "candidate-b"],
+          new Set(["fact-a"]),
+        ),
+      /excluded_ids must contain at least one candidate/,
+    );
+    assert.throws(
+      () =>
+        validateTasteDecision(
+          {
+            action: "select",
+            selected_ids: ["candidate-a"],
+            excluded_ids: ["candidate-b", "candidate-b"],
+            criterion_tags: [],
+            evidence_refs: ["fact-a"],
+          },
+          ["candidate-a", "candidate-b"],
+          new Set(["fact-a"]),
+        ),
+      /excluded_ids must be unique/,
+    );
+    assert.throws(
+      () =>
+        validateTasteDecision(
+          {
+            action: "select",
+            selected_ids: ["candidate-a"],
+            excluded_ids: ["candidate-missing"],
+            criterion_tags: [],
+            evidence_refs: ["fact-a"],
+          },
+          ["candidate-a", "candidate-b"],
+          new Set(["fact-a"]),
+        ),
+      /excluded_ids references unknown candidate candidate-missing/,
+    );
+    assert.throws(
+      () =>
+        validateTasteDecision(
+          {
+            action: "select",
+            selected_ids: ["candidate-a"],
+            criterion_tags: [],
+            criterion: "",
+            rationale: "",
+            evidence_refs: ["fact-a"],
+          },
+          ["candidate-a", "candidate-b"],
+          new Set(["fact-a"]),
+        ),
+      /criterion must be non-empty when provided/,
+    );
   });
 
   it("rejects candidate evidence that is not declared by the episode", () => {
@@ -207,6 +268,16 @@ describe("Taste episode contract", () => {
       () => validateTasteEpisode(invalid),
       /sealed decision action select is not allowed/,
     );
+  });
+
+  it("rejects empty optional control metadata and unknown JSON properties", () => {
+    const emptyControl = structuredClone(episode);
+    emptyControl.control.matched_case_id = "";
+    assert.throws(() => validateTasteEpisode(emptyControl), /matched_case_id is required/);
+
+    const extra = structuredClone(episode) as TasteEpisode & { unexpected: true };
+    extra.unexpected = true;
+    assert.throws(() => validateTasteEpisode(extra), /episode contains unknown property unexpected/);
   });
 
   it("keeps public schema separate from sealed judgment metadata", () => {
