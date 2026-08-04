@@ -1,167 +1,132 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import {
-  TASTE_CONTROL_CONDITIONS,
-  TASTE_DECISION_ACTIONS,
-  type DecisionArtifact,
+  toPublicTasteEpisode,
+  validateTasteDecision,
+  validateTasteEpisode,
+  type TasteDecision,
   type TasteEpisode,
 } from "../src/taste.ts";
 
-const schemaPath = resolve(
-  import.meta.dirname,
-  "../schemas/taste-episode.schema.json",
-);
-
-const holdDecision: DecisionArtifact = {
-  action: "hold",
-  evidence_refs: ["target-unknown"],
-  uncertainty: "The target criterion is not established by the available evidence.",
+const selectDecision: TasteDecision = {
+  action: "select",
+  selected_ids: ["candidate-a"],
+  excluded_ids: ["candidate-b"],
+  criterion_tags: ["quiet-detail"],
+  evidence_refs: ["target-1", "fact-a", "fact-b"],
 };
 
 const episode: TasteEpisode = {
   schema_version: "1.0.0",
   suite_version: "0.1.0",
-  episode_id: "insufficient-context",
-  task: "Choose a defensible option for the stated target.",
+  episode_id: "selection-contrast-anchor",
+  capability: "viewpoint-conditioned-value-selection",
+  task: "Choose the most useful option for the stated context.",
+  context: {
+    audience: "a reader with limited attention",
+    purpose: "make a shortlist",
+    stakes: "medium",
+  },
   factual_evidence: [
-    { source_id: "option-a", claim: "Option A is available this week." },
-    { source_id: "option-b", claim: "Option B is available this week." },
+    { source_id: "fact-a", claim: "Candidate A is available today." },
+    { source_id: "fact-b", claim: "Candidate B is available today." },
+  ],
+  target_evidence: [
+    { source_id: "target-1", claim: "The target repeatedly removes noisy options." },
   ],
   candidates: [
     {
       candidate_id: "candidate-a",
       label: "Option A",
-      factually_admissible: true,
-      evidence: [{ source_id: "option-a", claim: "Option A is available this week." }],
+      evidence_refs: ["fact-a"],
     },
     {
       candidate_id: "candidate-b",
       label: "Option B",
-      factually_admissible: true,
-      evidence: [{ source_id: "option-b", claim: "Option B is available this week." }],
+      evidence_refs: ["fact-b"],
     },
   ],
-  target_evidence: [
-    { source_id: "target-unknown", claim: "The target's priority is not stated." },
-  ],
-  context: {
-    audience: "a general decision-maker",
-    purpose: "make a useful recommendation",
-    stakes: "moderate",
-    time: "this week",
-    variables: { channel: "written", urgency: 2 },
-  },
-  control_condition: {
-    kind: "retrieval-only",
-    description: "The candidate receives the factual evidence without a target criterion.",
+  control: {
+    condition: "taste",
+    matched_case_id: "selection-contrast-knowledge-only",
+    evidence_budget: 1,
   },
   allowed_actions: ["select", "rank", "exclude", "hold", "ask"],
-  decision: holdDecision,
+  pair: {
+    pair_id: "selection-contrast",
+    role: "anchor",
+    perturbation: "none",
+    expected_relation: "independent",
+  },
   sealed_judgment: {
-    status: "sealed",
-    package_id: "judgment-insufficient-context-v1",
-    version: "1.0.0",
-    digest: "sha256:sealed-judgment-digest",
+    acceptable_decisions: [
+      {
+        decision_id: "quiet-detail-choice",
+        decision: selectDecision,
+        utility: 0.9,
+      },
+      {
+        decision_id: "reasonable-alternative",
+        decision: {
+          ...selectDecision,
+          selected_ids: ["candidate-b"],
+          excluded_ids: ["candidate-a"],
+          criterion_tags: ["availability-first"],
+        },
+        utility: 0.7,
+      },
+    ],
+    criterion_tags: ["quiet-detail", "availability-first"],
+    candidate_utility: {
+      "candidate-a": 0.9,
+      "candidate-b": 0.7,
+    },
+    omission_cost: {
+      "candidate-a": 0.2,
+      "candidate-b": 0.1,
+    },
   },
 };
 
-describe("generic Taste episode contract", () => {
-  it("models factually admissible alternatives, target evidence, context, and controls", () => {
-    assert.equal(episode.candidates.length, 2);
-    assert.equal(
-      episode.candidates.every(({ factually_admissible }) => factually_admissible),
-      true,
-    );
-    assert.equal(episode.target_evidence[0]?.claim, "The target's priority is not stated.");
-    assert.equal(episode.context.purpose, "make a useful recommendation");
-    assert.deepEqual(TASTE_CONTROL_CONDITIONS, [
-      "knowledge-only",
-      "retrieval-only",
-      "explicit-rule",
-      "style",
-    ]);
-    assert.deepEqual(episode.allowed_actions, TASTE_DECISION_ACTIONS);
+describe("Taste episode contract", () => {
+  it("accepts a fact-matched episode and strips sealed judgments from public input", () => {
+    assert.doesNotThrow(() => validateTasteEpisode(episode));
+
+    const publicEpisode = toPublicTasteEpisode(episode);
+    assert.equal("sealed_judgment" in publicEpisode, false);
+    assert.equal(publicEpisode.episode_id, episode.episode_id);
+    assert.deepEqual(publicEpisode.candidates, episode.candidates);
   });
 
-  it("allows every decision action without requiring a selected item", () => {
-    const decisions: DecisionArtifact[] = [
-      {
-        action: "select",
-        candidate_ids: ["candidate-a", "candidate-b"],
-        evidence_refs: ["option-a", "option-b"],
-        criterion: "Both options satisfy the declared need.",
-      },
-      {
-        action: "rank",
-        candidate_ids: ["candidate-b", "candidate-a"],
-        evidence_refs: ["option-a", "option-b"],
-        criterion: "Option B has the stronger fit.",
-      },
-      {
-        action: "exclude",
-        candidate_ids: ["candidate-b"],
-        evidence_refs: ["option-b"],
-        trade_off: "Option B is less suitable for the stated constraint.",
-      },
-      { action: "hold", evidence_refs: [], uncertainty: "Need the target criterion." },
-      { action: "ask", evidence_refs: [], question: "What matters most to the target?" },
-    ];
-
-    assert.deepEqual(
-      decisions.map(({ action }) => action),
-      ["select", "rank", "exclude", "hold", "ask"],
+  it("requires the fields implied by each decision action", () => {
+    assert.doesNotThrow(() =>
+      validateTasteDecision({
+        action: "hold",
+        criterion_tags: [],
+        evidence_refs: ["target-1"],
+      }, ["candidate-a", "candidate-b"]),
     );
-    assert.equal(holdDecision.candidate_ids, undefined);
-    assert.equal(episode.decision?.action, "hold");
+    assert.throws(
+      () =>
+        validateTasteDecision(
+          {
+            action: "select",
+            criterion_tags: [],
+            evidence_refs: [],
+          },
+          ["candidate-a", "candidate-b"],
+        ),
+      /selected_ids must contain at least one candidate/,
+    );
   });
 
-  it("keeps evidence claims consistent and seals judgment metadata", async () => {
-    const allEvidence = [
-      ...episode.factual_evidence,
-      ...episode.target_evidence,
-      ...episode.candidates.flatMap(({ evidence }) => evidence),
-    ];
-    assert.equal(allEvidence.every((item) => "claim" in item), true);
-    assert.equal(allEvidence.some((item) => "content" in item), false);
-    assert.equal(episode.sealed_judgment.status, "sealed");
-    assert.equal(episode.sealed_judgment.digest.startsWith("sha256:"), true);
+  it("rejects candidate evidence that is not declared by the episode", () => {
+    const invalid = structuredClone(episode);
+    invalid.candidates[0].evidence_refs = ["fact-missing"];
 
-    const schema = JSON.parse(await readFile(schemaPath, "utf8")) as {
-      required: string[];
-      properties: Record<string, { $ref?: string }>;
-      $defs: Record<string, {
-        required?: string[];
-        properties?: Record<string, { enum?: string[]; const?: unknown; minItems?: number }>;
-      }>;
-    };
-
-    assert.deepEqual(schema.properties.sealed_judgment, {
-      $ref: "#/$defs/sealed_judgment",
-    });
-    assert.equal(schema.required.includes("factual_evidence"), true);
-    assert.equal(schema.required.includes("candidates"), true);
-    assert.equal(schema.required.includes("target_evidence"), true);
-    assert.equal(schema.required.includes("context"), true);
-    assert.equal(schema.required.includes("control_condition"), true);
-    assert.equal(schema.required.includes("allowed_actions"), true);
-    assert.deepEqual(schema.$defs.decision_artifact?.properties?.action?.enum, [
-      "select",
-      "rank",
-      "exclude",
-      "hold",
-      "ask",
-    ]);
-    assert.equal(schema.$defs.decision_artifact?.properties?.candidate_ids?.minItems, undefined);
-    assert.deepEqual(schema.$defs.control_condition?.properties?.kind?.enum, [
-      "knowledge-only",
-      "retrieval-only",
-      "explicit-rule",
-      "style",
-    ]);
-    assert.equal(schema.$defs.sealed_judgment?.properties?.status?.const, "sealed");
-    assert.deepEqual(schema.$defs.evidence?.required, ["source_id", "claim"]);
-    assert.equal(schema.$defs.evidence?.properties?.claim?.const, undefined);
+    assert.throws(
+      () => validateTasteEpisode(invalid),
+      /candidate candidate-a references undeclared evidence fact-missing/,
+    );
   });
 });

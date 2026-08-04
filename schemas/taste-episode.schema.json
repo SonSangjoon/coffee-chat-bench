@@ -1,19 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://coffee-chat.dev/eval/schemas/taste-episode.schema.json",
-  "title": "Generic Taste Episode",
+  "$id": "https://coffee-chat.dev/bench/schemas/taste-episode.schema.json",
+  "title": "Viewpoint-Conditioned Taste Episode",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version",
     "suite_version",
     "episode_id",
+    "capability",
     "task",
-    "factual_evidence",
-    "candidates",
-    "target_evidence",
     "context",
-    "control_condition",
+    "factual_evidence",
+    "target_evidence",
+    "candidates",
+    "control",
     "allowed_actions",
     "sealed_judgment"
   ],
@@ -24,16 +25,12 @@
       "type": "string",
       "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
     },
+    "capability": { "type": "string", "minLength": 1 },
     "task": { "type": "string", "minLength": 1 },
+    "context": {},
     "factual_evidence": {
       "type": "array",
       "items": { "$ref": "#/$defs/evidence" },
-      "uniqueItems": true
-    },
-    "candidates": {
-      "type": "array",
-      "minItems": 1,
-      "items": { "$ref": "#/$defs/candidate" },
       "uniqueItems": true
     },
     "target_evidence": {
@@ -41,31 +38,23 @@
       "items": { "$ref": "#/$defs/evidence" },
       "uniqueItems": true
     },
-    "context": { "$ref": "#/$defs/context" },
-    "control_condition": { "$ref": "#/$defs/control_condition" },
+    "candidates": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "$ref": "#/$defs/candidate" },
+      "uniqueItems": true
+    },
+    "control": { "$ref": "#/$defs/control" },
     "allowed_actions": {
       "type": "array",
       "minItems": 1,
-      "items": { "enum": ["select", "rank", "exclude", "hold", "ask"] },
+      "items": { "$ref": "#/$defs/action" },
       "uniqueItems": true
     },
-    "decision": { "$ref": "#/$defs/decision_artifact" },
-    "sealed_judgment": { "$ref": "#/$defs/sealed_judgment" }
+    "pair": { "$ref": "#/$defs/pair" },
+    "sealed_judgment": { "$ref": "#/$defs/judgment" }
   },
   "$defs": {
-    "json_value": {
-      "anyOf": [
-        { "type": "string" },
-        { "type": "number" },
-        { "type": "boolean" },
-        { "type": "null" },
-        { "type": "array", "items": { "$ref": "#/$defs/json_value" } },
-        {
-          "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/json_value" }
-        }
-      ]
-    },
     "evidence": {
       "type": "object",
       "additionalProperties": false,
@@ -78,82 +67,141 @@
     "candidate": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "candidate_id",
-        "label",
-        "factually_admissible",
-        "evidence"
-      ],
+      "required": ["candidate_id", "label", "evidence_refs"],
       "properties": {
         "candidate_id": { "type": "string", "minLength": 1 },
         "label": { "type": "string", "minLength": 1 },
-        "factually_admissible": { "const": true },
-        "evidence": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/evidence" },
-          "uniqueItems": true
-        }
-      }
-    },
-    "context": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "audience": { "type": "string", "minLength": 1 },
-        "purpose": { "type": "string", "minLength": 1 },
-        "stakes": { "type": "string", "minLength": 1 },
-        "time": { "type": "string", "minLength": 1 },
-        "variables": {
-          "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/json_value" }
-        }
-      }
-    },
-    "control_condition": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind"],
-      "properties": {
-        "kind": {
-          "enum": ["knowledge-only", "retrieval-only", "explicit-rule", "style"]
-        },
-        "description": { "type": "string", "minLength": 1 }
-      }
-    },
-    "decision_artifact": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["action", "evidence_refs"],
-      "properties": {
-        "action": {
-          "enum": ["select", "rank", "exclude", "hold", "ask"]
-        },
-        "candidate_ids": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 },
-          "uniqueItems": true
-        },
-        "criterion": { "type": "string", "minLength": 1 },
-        "trade_off": { "type": "string", "minLength": 1 },
         "evidence_refs": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
           "uniqueItems": true
         },
-        "uncertainty": { "type": "string", "minLength": 1 },
-        "question": { "type": "string", "minLength": 1 },
-        "artifact": { "$ref": "#/$defs/json_value" }
+        "attributes": {}
       }
     },
-    "sealed_judgment": {
+    "condition": {
+      "enum": [
+        "taste",
+        "knowledge-only",
+        "retrieval-only",
+        "explicit-rule",
+        "style"
+      ]
+    },
+    "control": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "package_id", "version", "digest"],
+      "required": ["condition"],
       "properties": {
-        "status": { "const": "sealed" },
-        "package_id": { "type": "string", "minLength": 1 },
-        "version": { "type": "string", "minLength": 1 },
-        "digest": { "type": "string", "minLength": 1 }
+        "condition": { "$ref": "#/$defs/condition" },
+        "matched_case_id": { "type": "string", "minLength": 1 },
+        "evidence_budget": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "action": {
+      "enum": ["select", "rank", "exclude", "hold", "ask"]
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "criterion_tags", "evidence_refs"],
+      "properties": {
+        "action": { "$ref": "#/$defs/action" },
+        "selected_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "excluded_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "ordered_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "criterion_tags": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "criterion": { "type": "string", "minLength": 1 },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "uncertainty": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["level"],
+          "properties": {
+            "level": { "enum": ["low", "medium", "high"] },
+            "note": { "type": "string", "minLength": 1 }
+          }
+        },
+        "question": { "type": "string", "minLength": 1 },
+        "rationale": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            { "properties": { "action": { "const": "select" } }, "required": ["selected_ids"] },
+            { "properties": { "action": { "const": "rank" } }, "required": ["ordered_ids"] },
+            { "properties": { "action": { "const": "exclude" } }, "required": ["excluded_ids"] },
+            { "properties": { "action": { "const": "hold" } } },
+            { "properties": { "action": { "const": "ask" } }, "required": ["question"] }
+          ]
+        }
+      ]
+    },
+    "pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pair_id", "role", "perturbation", "expected_relation"],
+      "properties": {
+        "pair_id": { "type": "string", "minLength": 1 },
+        "role": { "enum": ["anchor", "contrast"] },
+        "perturbation": { "enum": ["none", "irrelevant", "decision-relevant"] },
+        "expected_relation": { "enum": ["same-decision", "different-decision", "independent"] }
+      }
+    },
+    "acceptable_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision_id", "decision", "utility"],
+      "properties": {
+        "decision_id": { "type": "string", "minLength": 1 },
+        "decision": { "$ref": "#/$defs/decision" },
+        "utility": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "score_map": {
+      "type": "object",
+      "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 }
+    },
+    "judgment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["acceptable_decisions", "criterion_tags", "candidate_utility", "omission_cost"],
+      "properties": {
+        "acceptable_decisions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/acceptable_decision" }
+        },
+        "criterion_tags": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "candidate_utility": { "$ref": "#/$defs/score_map" },
+        "omission_cost": { "$ref": "#/$defs/score_map" }
       }
     }
   }

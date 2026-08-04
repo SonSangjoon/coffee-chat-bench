@@ -1,48 +1,22 @@
-export type TasteJsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | TasteJsonValue[]
-  | { [key: string]: TasteJsonValue };
+import type { Evidence, JsonValue } from "./runner.ts";
 
-export type Evidence = {
-  source_id: string;
-  claim: string;
-};
-
-export type TasteEvidence = Evidence;
-
-export type Candidate = {
-  candidate_id: string;
-  label: string;
-  factually_admissible: true;
-  evidence: Evidence[];
-};
-
-export type TasteCandidate = Candidate;
-export type TargetEvidence = Evidence;
-
-export type TasteContext = {
-  audience?: string;
-  purpose?: string;
-  stakes?: string;
-  time?: string;
-  variables?: Record<string, TasteJsonValue>;
-};
+export type TasteContext = JsonValue;
 
 export const TASTE_CONTROL_CONDITIONS = [
+  "taste",
   "knowledge-only",
   "retrieval-only",
   "explicit-rule",
   "style",
 ] as const;
 
-export type ControlKind = (typeof TASTE_CONTROL_CONDITIONS)[number];
+export type TasteControlCondition =
+  (typeof TASTE_CONTROL_CONDITIONS)[number];
 
-export type ControlCondition = {
-  kind: ControlKind;
-  description?: string;
+export type TasteControl = {
+  condition: TasteControlCondition;
+  matched_case_id?: string;
+  evidence_budget?: number;
 };
 
 export const TASTE_DECISION_ACTIONS = [
@@ -53,42 +27,243 @@ export const TASTE_DECISION_ACTIONS = [
   "ask",
 ] as const;
 
-export type DecisionAction = (typeof TASTE_DECISION_ACTIONS)[number];
+export type TasteDecisionAction = (typeof TASTE_DECISION_ACTIONS)[number];
 
-export type DecisionArtifact = {
-  action: DecisionAction;
-  candidate_ids?: string[];
-  criterion?: string;
-  trade_off?: string;
+export type TasteCandidate = {
+  candidate_id: string;
+  label: string;
   evidence_refs: string[];
-  uncertainty?: string;
+  attributes?: JsonValue;
+};
+
+export type TastePair = {
+  pair_id: string;
+  role: "anchor" | "contrast";
+  perturbation: "none" | "irrelevant" | "decision-relevant";
+  expected_relation: "same-decision" | "different-decision" | "independent";
+};
+
+export type TasteUncertainty = {
+  level: "low" | "medium" | "high";
+  note?: string;
+};
+
+export type TasteDecision = {
+  action: TasteDecisionAction;
+  selected_ids?: string[];
+  excluded_ids?: string[];
+  ordered_ids?: string[];
+  criterion_tags: string[];
+  criterion?: string;
+  evidence_refs: string[];
+  uncertainty?: TasteUncertainty;
   question?: string;
-  artifact?: TasteJsonValue;
+  rationale?: string;
 };
 
-export type TasteDecision = DecisionArtifact;
-
-export type SealedJudgmentMetadata = {
-  status: "sealed";
-  package_id: string;
-  version: string;
-  digest: string;
+export type TasteAcceptableDecision = {
+  decision_id: string;
+  decision: TasteDecision;
+  utility: number;
 };
 
-export type SealedJudgment = SealedJudgmentMetadata;
-export type JudgmentPackage = SealedJudgmentMetadata;
+export type TasteJudgmentPackage = {
+  acceptable_decisions: TasteAcceptableDecision[];
+  criterion_tags: string[];
+  candidate_utility: Record<string, number>;
+  omission_cost: Record<string, number>;
+};
 
 export type TasteEpisode = {
   schema_version: "1.0.0";
   suite_version: string;
   episode_id: string;
+  capability: string;
   task: string;
-  factual_evidence: Evidence[];
-  candidates: Candidate[];
-  target_evidence: TargetEvidence[];
   context: TasteContext;
-  control_condition: ControlCondition;
-  allowed_actions: DecisionAction[];
-  decision?: DecisionArtifact;
-  sealed_judgment: SealedJudgmentMetadata;
+  factual_evidence: Evidence[];
+  target_evidence: Evidence[];
+  candidates: TasteCandidate[];
+  control: TasteControl;
+  allowed_actions: TasteDecisionAction[];
+  pair?: TastePair;
+  sealed_judgment: TasteJudgmentPackage;
 };
+
+export type PublicTasteEpisode = Omit<TasteEpisode, "sealed_judgment">;
+
+export function toPublicTasteEpisode(
+  episode: TasteEpisode,
+): PublicTasteEpisode {
+  const { sealed_judgment: _sealedJudgment, ...publicEpisode } = episode;
+  return publicEpisode;
+}
+
+export function validateTasteEpisode(episode: TasteEpisode): void {
+  requireText(episode.episode_id, "episode_id");
+  requireText(episode.suite_version, "suite_version");
+  requireText(episode.capability, "capability");
+  requireText(episode.task, "task");
+
+  if (episode.schema_version !== "1.0.0") {
+    throw new Error("schema_version must be 1.0.0");
+  }
+  if (episode.candidates.length < 2) {
+    throw new Error("candidates must contain at least two alternatives");
+  }
+
+  const candidateIds = uniqueText(
+    episode.candidates.map(({ candidate_id }) => candidate_id),
+    "candidate_id",
+  );
+  const factualSourceIds = uniqueText(
+    episode.factual_evidence.map(({ source_id }) => source_id),
+    "factual evidence source_id",
+  );
+  const targetSourceIds = uniqueText(
+    episode.target_evidence.map(({ source_id }) => source_id),
+    "target evidence source_id",
+  );
+  const declaredEvidenceIds = new Set([
+    ...factualSourceIds,
+    ...targetSourceIds,
+  ]);
+
+  for (const candidate of episode.candidates) {
+    requireText(candidate.label, `candidate ${candidate.candidate_id} label`);
+    for (const evidenceRef of candidate.evidence_refs) {
+      if (!declaredEvidenceIds.has(evidenceRef)) {
+        throw new Error(
+          `candidate ${candidate.candidate_id} references undeclared evidence ${evidenceRef}`,
+        );
+      }
+    }
+  }
+
+  if (!TASTE_CONTROL_CONDITIONS.includes(episode.control.condition)) {
+    throw new Error(
+      `unsupported control condition ${episode.control.condition}`,
+    );
+  }
+  if (
+    episode.control.evidence_budget !== undefined &&
+    (!Number.isInteger(episode.control.evidence_budget) ||
+      episode.control.evidence_budget < 0)
+  ) {
+    throw new Error("control evidence_budget must be a non-negative integer");
+  }
+
+  const allowedActions = uniqueText(episode.allowed_actions, "allowed action");
+  for (const action of allowedActions) {
+    if (!TASTE_DECISION_ACTIONS.includes(action as TasteDecisionAction)) {
+      throw new Error(`unsupported decision action ${action}`);
+    }
+  }
+
+  if (episode.pair) validateTastePair(episode.pair);
+
+  if (episode.sealed_judgment.acceptable_decisions.length === 0) {
+    throw new Error("sealed_judgment must contain an acceptable decision");
+  }
+  for (const acceptable of episode.sealed_judgment.acceptable_decisions) {
+    requireText(acceptable.decision_id, "acceptable decision_id");
+    assertUtility(acceptable.utility, "acceptable decision utility");
+    validateTasteDecision(acceptable.decision, candidateIds, declaredEvidenceIds);
+  }
+  validateTagList(episode.sealed_judgment.criterion_tags, "criterion_tags");
+  validateCandidateScores(
+    episode.sealed_judgment.candidate_utility,
+    candidateIds,
+    "candidate_utility",
+  );
+  validateCandidateScores(
+    episode.sealed_judgment.omission_cost,
+    candidateIds,
+    "omission_cost",
+  );
+}
+
+export function validateTasteDecision(
+  decision: TasteDecision,
+  candidateIds: string[],
+  declaredEvidenceIds: Set<string> = new Set(),
+): void {
+  if (!TASTE_DECISION_ACTIONS.includes(decision.action)) {
+    throw new Error(`unsupported decision action ${decision.action}`);
+  }
+  validateTagList(decision.criterion_tags, "criterion_tags");
+  uniqueText(decision.evidence_refs, "evidence reference");
+  for (const evidenceRef of decision.evidence_refs) {
+    if (declaredEvidenceIds.size > 0 && !declaredEvidenceIds.has(evidenceRef)) {
+      throw new Error(`decision references undeclared evidence ${evidenceRef}`);
+    }
+  }
+
+  const candidateSet = new Set(candidateIds);
+  const validateIds = (ids: string[] | undefined, field: string): void => {
+    if (!ids || ids.length === 0) {
+      throw new Error(`${field} must contain at least one candidate`);
+    }
+    uniqueText(ids, field);
+    for (const id of ids) {
+      if (!candidateSet.has(id)) {
+        throw new Error(`${field} references unknown candidate ${id}`);
+      }
+    }
+  };
+
+  if (decision.action === "select") validateIds(decision.selected_ids, "selected_ids");
+  if (decision.action === "rank") validateIds(decision.ordered_ids, "ordered_ids");
+  if (decision.action === "exclude") validateIds(decision.excluded_ids, "excluded_ids");
+  if (decision.action === "ask") requireText(decision.question, "question");
+  if (decision.uncertainty?.note !== undefined) {
+    requireText(decision.uncertainty.note, "uncertainty note");
+  }
+}
+
+function validateTastePair(pair: TastePair): void {
+  requireText(pair.pair_id, "pair_id");
+  if (!["anchor", "contrast"].includes(pair.role)) {
+    throw new Error(`unsupported pair role ${pair.role}`);
+  }
+  if (!["none", "irrelevant", "decision-relevant"].includes(pair.perturbation)) {
+    throw new Error(`unsupported pair perturbation ${pair.perturbation}`);
+  }
+  if (!["same-decision", "different-decision", "independent"].includes(pair.expected_relation)) {
+    throw new Error(`unsupported pair expected_relation ${pair.expected_relation}`);
+  }
+}
+
+function validateCandidateScores(
+  scores: Record<string, number>,
+  candidateIds: string[],
+  field: string,
+): void {
+  for (const [candidateId, score] of Object.entries(scores)) {
+    if (!candidateIds.includes(candidateId)) {
+      throw new Error(`${field} references unknown candidate ${candidateId}`);
+    }
+    assertUtility(score, `${field}.${candidateId}`);
+  }
+}
+
+function assertUtility(value: number, field: string): void {
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new Error(`${field} must be between 0 and 1`);
+  }
+}
+
+function validateTagList(tags: string[], field: string): void {
+  uniqueText(tags, field);
+}
+
+function uniqueText(values: string[], field: string): string[] {
+  for (const value of values) requireText(value, field);
+  const unique = new Set(values);
+  if (unique.size !== values.length) throw new Error(`${field} must be unique`);
+  return values;
+}
+
+function requireText(value: string | undefined, field: string): void {
+  if (!value?.trim()) throw new Error(`${field} is required`);
+}
