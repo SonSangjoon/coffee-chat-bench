@@ -48,7 +48,57 @@ export type TasteUncertainty = {
   note?: string;
 };
 
-export type TasteDecision = {
+type TasteDecisionBase = {
+  criterion_tags: string[];
+  criterion?: string;
+  evidence_refs: string[];
+  uncertainty?: TasteUncertainty;
+  rationale?: string;
+};
+
+export type TasteDecision =
+  | (TasteDecisionBase & {
+      action: "select";
+      selected_ids: string[];
+      excluded_ids?: string[];
+      ordered_ids?: never;
+      question?: never;
+    })
+  | (TasteDecisionBase & {
+      action: "rank";
+      ordered_ids: string[];
+      selected_ids?: never;
+      excluded_ids?: never;
+      question?: never;
+    })
+  | (TasteDecisionBase & {
+      action: "exclude";
+      excluded_ids: string[];
+      selected_ids?: never;
+      ordered_ids?: never;
+      question?: never;
+    })
+  | (TasteDecisionBase & {
+      action: "hold";
+      selected_ids?: never;
+      excluded_ids?: never;
+      ordered_ids?: never;
+      question?: never;
+    })
+  | (TasteDecisionBase & {
+      action: "ask";
+      question: string;
+      selected_ids?: never;
+      excluded_ids?: never;
+      ordered_ids?: never;
+    });
+
+/*
+ * Keep the discriminated union above as the public shape. Runtime validation
+ * below remains necessary because episodes and candidate outputs cross a
+ * process boundary as JSON.
+ */
+type UnvalidatedTasteDecision = {
   action: TasteDecisionAction;
   selected_ids?: string[];
   excluded_ids?: string[];
@@ -78,6 +128,7 @@ export type TasteEpisode = {
   schema_version: "1.0.0";
   suite_version: string;
   episode_id: string;
+  evaluation_split: "public" | "held-out" | "sealed";
   capability: string;
   task: string;
   context: TasteContext;
@@ -108,6 +159,12 @@ export function validateTasteEpisode(episode: TasteEpisode): void {
   if (episode.schema_version !== "1.0.0") {
     throw new Error("schema_version must be 1.0.0");
   }
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(episode.episode_id)) {
+    throw new Error("episode_id must match lowercase kebab-case");
+  }
+  if (!["public", "held-out", "sealed"].includes(episode.evaluation_split)) {
+    throw new Error("evaluation_split must be public, held-out, or sealed");
+  }
   if (episode.candidates.length < 2) {
     throw new Error("candidates must contain at least two alternatives");
   }
@@ -124,6 +181,8 @@ export function validateTasteEpisode(episode: TasteEpisode): void {
     episode.target_evidence.map(({ source_id }) => source_id),
     "target evidence source_id",
   );
+  validateEvidence(episode.factual_evidence);
+  validateEvidence(episode.target_evidence);
   const declaredEvidenceIds = new Set([
     ...factualSourceIds,
     ...targetSourceIds,
@@ -131,8 +190,19 @@ export function validateTasteEpisode(episode: TasteEpisode): void {
 
   for (const candidate of episode.candidates) {
     requireText(candidate.label, `candidate ${candidate.candidate_id} label`);
+    if (candidate.evidence_refs.length === 0) {
+      throw new Error(
+        `candidate ${candidate.candidate_id} must cite at least one factual evidence source`,
+      );
+    }
+    uniqueText(candidate.evidence_refs, `candidate ${candidate.candidate_id} evidence reference`);
     for (const evidenceRef of candidate.evidence_refs) {
-      if (!declaredEvidenceIds.has(evidenceRef)) {
+      if (!factualSourceIds.includes(evidenceRef)) {
+        if (targetSourceIds.includes(evidenceRef)) {
+          throw new Error(
+            `candidate ${candidate.candidate_id} must cite factual evidence only`,
+          );
+        }
         throw new Error(
           `candidate ${candidate.candidate_id} references undeclared evidence ${evidenceRef}`,
         );
@@ -168,7 +238,12 @@ export function validateTasteEpisode(episode: TasteEpisode): void {
   for (const acceptable of episode.sealed_judgment.acceptable_decisions) {
     requireText(acceptable.decision_id, "acceptable decision_id");
     assertUtility(acceptable.utility, "acceptable decision utility");
-    validateTasteDecision(acceptable.decision, candidateIds, declaredEvidenceIds);
+    validateTasteDecision(
+      acceptable.decision,
+      candidateIds,
+      declaredEvidenceIds,
+      new Set(allowedActions),
+    );
   }
   validateTagList(episode.sealed_judgment.criterion_tags, "criterion_tags");
   validateCandidateScores(
@@ -186,15 +261,22 @@ export function validateTasteEpisode(episode: TasteEpisode): void {
 export function validateTasteDecision(
   decision: TasteDecision,
   candidateIds: string[],
-  declaredEvidenceIds: Set<string> = new Set(),
+  declaredEvidenceIds: Set<string>,
+  allowedActions?: ReadonlySet<TasteDecisionAction>,
 ): void {
   if (!TASTE_DECISION_ACTIONS.includes(decision.action)) {
     throw new Error(`unsupported decision action ${decision.action}`);
   }
+  if (allowedActions && !allowedActions.has(decision.action)) {
+    throw new Error(`sealed decision action ${decision.action} is not allowed`);
+  }
+  if (decision.evidence_refs.length === 0) {
+    throw new Error("decision must cite at least one evidence source");
+  }
   validateTagList(decision.criterion_tags, "criterion_tags");
   uniqueText(decision.evidence_refs, "evidence reference");
   for (const evidenceRef of decision.evidence_refs) {
-    if (declaredEvidenceIds.size > 0 && !declaredEvidenceIds.has(evidenceRef)) {
+    if (!declaredEvidenceIds.has(evidenceRef)) {
       throw new Error(`decision references undeclared evidence ${evidenceRef}`);
     }
   }
@@ -212,10 +294,38 @@ export function validateTasteDecision(
     }
   };
 
-  if (decision.action === "select") validateIds(decision.selected_ids, "selected_ids");
-  if (decision.action === "rank") validateIds(decision.ordered_ids, "ordered_ids");
-  if (decision.action === "exclude") validateIds(decision.excluded_ids, "excluded_ids");
-  if (decision.action === "ask") requireText(decision.question, "question");
+  if (decision.action === "select") {
+    validateIds(decision.selected_ids, "selected_ids");
+    if (decision.ordered_ids || decision.question) {
+      throw new Error("select decisions must not include ordered_ids or question");
+    }
+  }
+  if (decision.action === "rank") {
+    validateIds(decision.ordered_ids, "ordered_ids");
+    if (decision.selected_ids || decision.excluded_ids || decision.question) {
+      throw new Error("rank decisions must not include selected, excluded, or question fields");
+    }
+  }
+  if (decision.action === "exclude") {
+    validateIds(decision.excluded_ids, "excluded_ids");
+    if (decision.selected_ids || decision.ordered_ids || decision.question) {
+      throw new Error("exclude decisions must not include selected, ordered, or question fields");
+    }
+  }
+  if (decision.action === "hold") {
+    if (decision.selected_ids || decision.excluded_ids || decision.ordered_ids || decision.question) {
+      throw new Error("hold decisions must not include candidate ids or question");
+    }
+  }
+  if (decision.action === "ask") {
+    requireText(decision.question, "question");
+    if (decision.selected_ids || decision.excluded_ids || decision.ordered_ids) {
+      throw new Error("ask decisions must not include candidate ids");
+    }
+  }
+  if (decision.uncertainty && !["low", "medium", "high"].includes(decision.uncertainty.level)) {
+    throw new Error("uncertainty level must be low, medium, or high");
+  }
   if (decision.uncertainty?.note !== undefined) {
     requireText(decision.uncertainty.note, "uncertainty note");
   }
@@ -231,6 +341,13 @@ function validateTastePair(pair: TastePair): void {
   }
   if (!["same-decision", "different-decision", "independent"].includes(pair.expected_relation)) {
     throw new Error(`unsupported pair expected_relation ${pair.expected_relation}`);
+  }
+}
+
+function validateEvidence(evidence: Evidence[]): void {
+  for (const item of evidence) {
+    requireText(item.source_id, "evidence source_id");
+    requireText(item.claim, "evidence claim");
   }
 }
 

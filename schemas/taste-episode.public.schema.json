@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://coffee-chat.dev/bench/schemas/taste-episode.public.schema.json",
+  "title": "Public Viewpoint-Conditioned Taste Episode",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "suite_version",
+    "episode_id",
+    "evaluation_split",
+    "capability",
+    "task",
+    "context",
+    "factual_evidence",
+    "target_evidence",
+    "candidates",
+    "control",
+    "allowed_actions"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "suite_version": { "type": "string", "minLength": 1 },
+    "episode_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "evaluation_split": { "enum": ["public", "held-out", "sealed"] },
+    "capability": { "type": "string", "minLength": 1 },
+    "task": { "type": "string", "minLength": 1 },
+    "context": {},
+    "factual_evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidence" },
+      "uniqueItems": true
+    },
+    "target_evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidence" },
+      "uniqueItems": true
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "$ref": "#/$defs/candidate" },
+      "uniqueItems": true
+    },
+    "control": { "$ref": "#/$defs/control" },
+    "allowed_actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/action" },
+      "uniqueItems": true
+    },
+    "pair": { "$ref": "#/$defs/pair" }
+  },
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "claim"],
+      "properties": {
+        "source_id": { "type": "string", "minLength": 1 },
+        "claim": { "type": "string", "minLength": 1 }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_id", "label", "evidence_refs"],
+      "properties": {
+        "candidate_id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "evidence_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "attributes": {}
+      }
+    },
+    "condition": {
+      "enum": [
+        "taste",
+        "knowledge-only",
+        "retrieval-only",
+        "explicit-rule",
+        "style"
+      ]
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["condition"],
+      "properties": {
+        "condition": { "$ref": "#/$defs/condition" },
+        "matched_case_id": { "type": "string", "minLength": 1 },
+        "evidence_budget": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "action": {
+      "enum": ["select", "rank", "exclude", "hold", "ask"]
+    },
+    "pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pair_id", "role", "perturbation", "expected_relation"],
+      "properties": {
+        "pair_id": { "type": "string", "minLength": 1 },
+        "role": { "enum": ["anchor", "contrast"] },
+        "perturbation": {
+          "enum": ["none", "irrelevant", "decision-relevant"]
+        },
+        "expected_relation": {
+          "enum": ["same-decision", "different-decision", "independent"]
+        }
+      }
+    }
+  }
+}

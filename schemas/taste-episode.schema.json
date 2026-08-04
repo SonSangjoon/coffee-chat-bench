@@ -8,6 +8,7 @@
     "schema_version",
     "suite_version",
     "episode_id",
+    "evaluation_split",
     "capability",
     "task",
     "context",
@@ -25,6 +26,7 @@
       "type": "string",
       "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
     },
+    "evaluation_split": { "enum": ["public", "held-out", "sealed"] },
     "capability": { "type": "string", "minLength": 1 },
     "task": { "type": "string", "minLength": 1 },
     "context": {},
@@ -73,6 +75,7 @@
         "label": { "type": "string", "minLength": 1 },
         "evidence_refs": {
           "type": "array",
+          "minItems": 1,
           "items": { "type": "string", "minLength": 1 },
           "uniqueItems": true
         },
@@ -133,6 +136,7 @@
         "criterion": { "type": "string", "minLength": 1 },
         "evidence_refs": {
           "type": "array",
+          "minItems": 1,
           "items": { "type": "string", "minLength": 1 },
           "uniqueItems": true
         },
@@ -151,11 +155,30 @@
       "allOf": [
         {
           "oneOf": [
-            { "properties": { "action": { "const": "select" } }, "required": ["selected_ids"] },
-            { "properties": { "action": { "const": "rank" } }, "required": ["ordered_ids"] },
-            { "properties": { "action": { "const": "exclude" } }, "required": ["excluded_ids"] },
-            { "properties": { "action": { "const": "hold" } } },
-            { "properties": { "action": { "const": "ask" } }, "required": ["question"] }
+            {
+              "properties": { "action": { "const": "select" } },
+              "required": ["selected_ids"],
+              "not": { "anyOf": [{ "required": ["ordered_ids"] }, { "required": ["question"] }] }
+            },
+            {
+              "properties": { "action": { "const": "rank" } },
+              "required": ["ordered_ids"],
+              "not": { "anyOf": [{ "required": ["selected_ids"] }, { "required": ["excluded_ids"] }, { "required": ["question"] }] }
+            },
+            {
+              "properties": { "action": { "const": "exclude" } },
+              "required": ["excluded_ids"],
+              "not": { "anyOf": [{ "required": ["selected_ids"] }, { "required": ["ordered_ids"] }, { "required": ["question"] }] }
+            },
+            {
+              "properties": { "action": { "const": "hold" } },
+              "not": { "anyOf": [{ "required": ["selected_ids"] }, { "required": ["excluded_ids"] }, { "required": ["ordered_ids"] }, { "required": ["question"] }] }
+            },
+            {
+              "properties": { "action": { "const": "ask" } },
+              "required": ["question"],
+              "not": { "anyOf": [{ "required": ["selected_ids"] }, { "required": ["excluded_ids"] }, { "required": ["ordered_ids"] }] }
+            }
           ]
         }
       ]

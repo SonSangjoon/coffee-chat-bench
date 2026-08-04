@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   toPublicTasteEpisode,
@@ -20,6 +21,7 @@ const episode: TasteEpisode = {
   schema_version: "1.0.0",
   suite_version: "0.1.0",
   episode_id: "selection-contrast-anchor",
+  evaluation_split: "public",
   capability: "viewpoint-conditioned-value-selection",
   task: "Choose the most useful option for the stated context.",
   context: {
@@ -95,6 +97,7 @@ describe("Taste episode contract", () => {
     const publicEpisode = toPublicTasteEpisode(episode);
     assert.equal("sealed_judgment" in publicEpisode, false);
     assert.equal(publicEpisode.episode_id, episode.episode_id);
+    assert.equal(publicEpisode.evaluation_split, "public");
     assert.deepEqual(publicEpisode.candidates, episode.candidates);
   });
 
@@ -104,7 +107,7 @@ describe("Taste episode contract", () => {
         action: "hold",
         criterion_tags: [],
         evidence_refs: ["target-1"],
-      }, ["candidate-a", "candidate-b"]),
+      }, ["candidate-a", "candidate-b"], new Set(["target-1"])),
     );
     assert.throws(
       () =>
@@ -112,11 +115,62 @@ describe("Taste episode contract", () => {
           {
             action: "select",
             criterion_tags: [],
-            evidence_refs: [],
+            evidence_refs: ["fact-a"],
           },
           ["candidate-a", "candidate-b"],
+          new Set(["fact-a"]),
         ),
       /selected_ids must contain at least one candidate/,
+    );
+    assert.doesNotThrow(() =>
+      validateTasteDecision(
+        {
+          action: "rank",
+          ordered_ids: ["candidate-a", "candidate-b"],
+          criterion_tags: [],
+          evidence_refs: ["fact-a"],
+        },
+        ["candidate-a", "candidate-b"],
+        new Set(["fact-a", "fact-b"]),
+      ),
+    );
+    assert.doesNotThrow(() =>
+      validateTasteDecision(
+        {
+          action: "exclude",
+          excluded_ids: ["candidate-b"],
+          criterion_tags: [],
+          evidence_refs: ["fact-b"],
+        },
+        ["candidate-a", "candidate-b"],
+        new Set(["fact-b"]),
+      ),
+    );
+    assert.doesNotThrow(() =>
+      validateTasteDecision(
+        {
+          action: "ask",
+          question: "Which trade-off matters more?",
+          criterion_tags: [],
+          evidence_refs: ["target-1"],
+        },
+        ["candidate-a", "candidate-b"],
+        new Set(["target-1"]),
+      ),
+    );
+    assert.throws(
+      () =>
+        validateTasteDecision(
+          {
+            action: "hold",
+            selected_ids: ["candidate-a"],
+            criterion_tags: [],
+            evidence_refs: ["target-1"],
+          },
+          ["candidate-a", "candidate-b"],
+          new Set(["target-1"]),
+        ),
+      /hold decisions must not include candidate ids/,
     );
   });
 
@@ -127,6 +181,73 @@ describe("Taste episode contract", () => {
     assert.throws(
       () => validateTasteEpisode(invalid),
       /candidate candidate-a references undeclared evidence fact-missing/,
+    );
+  });
+
+  it("requires every candidate to cite factual evidence only", () => {
+    const empty = structuredClone(episode);
+    empty.candidates[0].evidence_refs = [];
+    assert.throws(
+      () => validateTasteEpisode(empty),
+      /candidate candidate-a must cite at least one factual evidence source/,
+    );
+
+    const targetOnly = structuredClone(episode);
+    targetOnly.candidates[0].evidence_refs = ["target-1"];
+    assert.throws(
+      () => validateTasteEpisode(targetOnly),
+      /candidate candidate-a must cite factual evidence only/,
+    );
+  });
+
+  it("requires sealed decisions to use an allowed action", () => {
+    const invalid = structuredClone(episode);
+    invalid.allowed_actions = ["hold"];
+    assert.throws(
+      () => validateTasteEpisode(invalid),
+      /sealed decision action select is not allowed/,
+    );
+  });
+
+  it("keeps public schema separate from sealed judgment metadata", () => {
+    const publicSchema = JSON.parse(
+      readFileSync(new URL("../schemas/taste-episode.public.schema.json", import.meta.url), "utf8"),
+    ) as { required: string[]; properties: Record<string, unknown> };
+    assert.equal(publicSchema.required.includes("sealed_judgment"), false);
+    assert.equal("sealed_judgment" in publicSchema.properties, false);
+    assert.equal("sealed_judgment" in toPublicTasteEpisode(episode), false);
+  });
+
+  it("rejects schema-invalid identifiers, claims, and uncertainty levels at runtime", () => {
+    const invalidId = structuredClone(episode);
+    invalidId.episode_id = "Not Valid";
+    assert.throws(() => validateTasteEpisode(invalidId), /episode_id must match/);
+
+    const invalidClaim = structuredClone(episode);
+    invalidClaim.factual_evidence[0].claim = "";
+    assert.throws(() => validateTasteEpisode(invalidClaim), /evidence claim is required/);
+
+    const invalidUncertainty = structuredClone(episode) as TasteEpisode & {
+      sealed_judgment: { acceptable_decisions: Array<{ decision: TasteDecision }> };
+    };
+    invalidUncertainty.sealed_judgment.acceptable_decisions[0].decision.uncertainty = {
+      level: "unknown" as "low",
+    };
+    assert.throws(
+      () => validateTasteEpisode(invalidUncertainty),
+      /uncertainty level must be low, medium, or high/,
+    );
+  });
+
+  it("rejects an unknown evaluation split", () => {
+    const invalid = structuredClone(episode) as TasteEpisode & {
+      evaluation_split: string;
+    };
+    invalid.evaluation_split = "unknown";
+
+    assert.throws(
+      () => validateTasteEpisode(invalid),
+      /evaluation_split must be public, held-out, or sealed/,
     );
   });
 });
