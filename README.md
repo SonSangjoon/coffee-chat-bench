@@ -1,19 +1,25 @@
 # Coffee Chat Bench
 
-Candidate-agnostic benchmark for [Coffee Chat](https://github.com/SonSangjoon/coffee-chat)
-and other AI systems.
+Independent, candidate-agnostic benchmark for
+[Coffee Chat](https://github.com/SonSangjoon/coffee-chat) and other AI systems.
 
 Public subtitle: **Benchmarking viewpoint-conditioned value selection in AI
 systems.**
 
 The benchmark asks whether a candidate can infer a target's value boundary from
 sparse evidence and turn many factually valid alternatives into a useful,
-context-conditioned selection, exclusion, ranking, or hold decision. It is
-separate from Coffee Chat implementation tests: those verify internal product
-contracts, while this repository measures external value, utility, and
-efficiency.
+context-conditioned selection, exclusion, ranking, or hold decision. Its
+working construct is **stakeholder-conditioned judgment under underspecified
+objectives**. It is separate from both Coffee Chat implementation tests and
+the `coffee-chat-eval` orchestration layer:
 
-The canonical repository and remote are `coffee-chat-bench`.
+- Coffee Chat implementation tests verify internal product contracts.
+- `coffee-chat-bench` measures the independent construct and its validity.
+- `coffee-chat-eval` can invoke this benchmark and combine its result with
+  other tracks in a Coffee Chat performance report.
+
+The canonical repository and remote are `coffee-chat-bench`. This repository
+does not own the complete Coffee Chat performance report.
 
 ## Implemented benchmark foundation
 
@@ -38,8 +44,9 @@ choice that ignores the target can still be factually correct, but it does not
 receive the same viewpoint lift as a target-matched choice.
 
 This is a measurement foundation, not yet a validated public leaderboard. Human
-panel calibration, independent real-world outcome validation, and efficiency
-instrumentation remain required before making a broad Taste claim.
+panel calibration, coverage-gap and discriminant/incremental-validity studies,
+independent real-world outcome validation, and efficiency instrumentation
+remain required before making a broad Taste claim.
 
 Run the foundation checks with:
 
