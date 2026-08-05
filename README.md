@@ -32,6 +32,9 @@ implementation tests and the `coffee-chat-eval` orchestration layer:
 - `coffee-chat-eval` can invoke this benchmark and combine its result with
   other tracks in a Coffee Chat performance report.
 
+The owner-maintained benchmark quality contract lives in
+[`docs/quality-map.md`](docs/quality-map.md).
+
 The canonical repository and remote are `coffee-chat-bench`. This repository
 does not own the complete Coffee Chat performance report.
 
