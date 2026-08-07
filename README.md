@@ -1,27 +1,44 @@
 # Coffee Chat Bench
 
-Independent, candidate-agnostic benchmark for
+Reserved candidate-agnostic benchmark repository for
 [Coffee Chat](https://github.com/SonSangjoon/coffee-chat) and other AI systems.
 
-Public subtitle: **Benchmarking viewpoint-conditioned value selection in AI
-systems.**
+Public subtitle: **Reserved for a future candidate-agnostic judgment
+benchmark.**
 
-The benchmark asks whether a candidate can infer a target's value boundary from
-sparse evidence and turn many factually valid alternatives into a useful,
-context-conditioned selection, exclusion, ranking, or hold decision. Its
-working construct is **stakeholder-conditioned judgment under underspecified
-objectives**. It is separate from both Coffee Chat implementation tests and
-the `coffee-chat-eval` orchestration layer:
+## Status: reserved placeholder
+
+This repository is intentionally kept as a place for future work. The current
+`src/` code is an exploratory measurement foundation, not an accepted
+benchmark release. It is not registered in `coffee-chat-eval`, and no score
+from it may be used as Coffee Chat performance evidence.
+
+Activation requires a documented coverage gap, a narrower construct than
+generic preference matching, human/evaluator calibration, discriminant and
+incremental validity, sealed cases and baselines, a statistical protocol, and
+reproducible execution with efficiency telemetry. The portfolio decision is
+recorded in the workspace-level `BENCHMARK-PORTFOLIO.md`.
+
+The proposed future benchmark asks whether a candidate can infer a target's
+value boundary from sparse evidence and turn many factually valid alternatives
+into a useful, context-conditioned selection, exclusion, ranking, or hold
+decision. Its working construct is **stakeholder-conditioned judgment under
+underspecified objectives**. It is separate from both Coffee Chat
+implementation tests and the `coffee-chat-eval` orchestration layer:
 
 - Coffee Chat implementation tests verify internal product contracts.
-- `coffee-chat-bench` measures the independent construct and its validity.
+- `coffee-chat-bench` will measure the independent construct and its validity
+  only after the activation gates pass.
 - `coffee-chat-eval` can invoke this benchmark and combine its result with
   other tracks in a Coffee Chat performance report.
+
+The owner-maintained benchmark quality contract lives in
+[`docs/quality-map.md`](docs/quality-map.md).
 
 The canonical repository and remote are `coffee-chat-bench`. This repository
 does not own the complete Coffee Chat performance report.
 
-## Implemented benchmark foundation
+## Exploratory foundation retained for later validation
 
 The first vertical slice now measures **viewpoint-conditioned value
 selection** through a candidate-agnostic contract:
@@ -47,6 +64,14 @@ This is a measurement foundation, not yet a validated public leaderboard. Human
 panel calibration, coverage-gap and discriminant/incremental-validity studies,
 independent real-world outcome validation, and efficiency instrumentation
 remain required before making a broad Taste claim.
+
+## CI boundary
+
+Pull-request and merge-queue lanes validate only the candidate-agnostic
+contract, schema, metric/verifier behavior, typecheck, and repository security
+policy. They do not execute candidate code or activate the benchmark. Dataset,
+metric, verifier, validity, schema, workflow, dependency, and provenance
+changes are protected paths and require the code-owner lane.
 
 Run the foundation checks with:
 

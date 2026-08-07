@@ -1,0 +1,18 @@
+{
+  "protectedFiles": [
+    "AGENTS.md",
+    "package.json",
+    "package-lock.json",
+    "src/runner.ts",
+    "src/taste.ts",
+    "src/taste-evaluator.ts",
+    "src/taste-runner.ts",
+    "src/pilot.ts",
+    "docs/quality-map.md"
+  ],
+  "protectedPrefixes": [
+    ".github/",
+    "schemas/",
+    "benchmarks/"
+  ]
+}
