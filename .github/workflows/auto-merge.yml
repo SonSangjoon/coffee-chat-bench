@@ -1,0 +1,52 @@
+name: Coffee Chat Bench Auto Merge
+
+on:
+  workflow_run:
+    workflows:
+      - Coffee Chat Bench CI
+      - Coffee Chat Bench Security
+      - CodeQL
+    types:
+      - completed
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+jobs:
+  enable:
+    name: enable-low-risk-squash-auto-merge
+    if: ${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Evaluate PR metadata without checkout
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          PR_NUMBER="$(jq -r '.workflow_run.pull_requests[0].number // empty' "$GITHUB_EVENT_PATH")"
+          if [ -z "$PR_NUMBER" ]; then exit 0; fi
+
+          PR_JSON="$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER")"
+          HEAD_SHA="$(jq -r '.head.sha' <<<"$PR_JSON")"
+          HEAD_REPOSITORY="$(jq -r '.head.repo.full_name // empty' <<<"$PR_JSON")"
+          if [ "$HEAD_SHA" != "$RUN_SHA" ] || [ "$HEAD_REPOSITORY" != "$REPOSITORY" ]; then exit 0; fi
+
+          POLICY="$(gh api "repos/$REPOSITORY/contents/.github/merge-policy.json?ref=main" --jq '.content' | tr -d '\n' | base64 --decode)"
+          mapfile -t FILES < <(gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[].filename')
+          for FILE in "${FILES[@]}"; do
+            [ -z "$FILE" ] && continue
+            while IFS= read -r PREFIX; do
+              if [[ "$FILE" == "$PREFIX"* ]]; then exit 0; fi
+            done < <(jq -r '.protectedPrefixes[]?' <<<"$POLICY")
+            while IFS= read -r EXACT; do
+              if [ "$FILE" = "$EXACT" ]; then exit 0; fi
+            done < <(jq -r '.protectedFiles[]?' <<<"$POLICY")
+          done
+
+          CHECKS="$(gh pr checks "$PR_NUMBER" --repo "$REPOSITORY" --required --json name,state,bucket)"
+          if ! jq -e 'length > 0 and all(.[]; .state == "SUCCESS" and .bucket == "pass")' <<<"$CHECKS" >/dev/null; then exit 0; fi
+          gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --auto --squash --match-head-commit "$HEAD_SHA"

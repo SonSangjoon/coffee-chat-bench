@@ -1,0 +1,13 @@
+# Benchmark construct, data, metric, and verifier boundaries require the owner.
+/.github/ @SonSangjoon
+/AGENTS.md @SonSangjoon
+/package.json @SonSangjoon
+/package-lock.json @SonSangjoon
+/src/runner.ts @SonSangjoon
+/src/taste.ts @SonSangjoon
+/src/taste-evaluator.ts @SonSangjoon
+/src/taste-runner.ts @SonSangjoon
+/src/pilot.ts @SonSangjoon
+/schemas/ @SonSangjoon
+/benchmarks/ @SonSangjoon
+/docs/quality-map.md @SonSangjoon

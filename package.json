@@ -11,6 +11,8 @@
   },
   "scripts": {
     "test": "node --experimental-strip-types --test test/*.test.ts",
-    "typecheck": "node --experimental-strip-types --check src/runner.ts && node --experimental-strip-types --check src/taste.ts && node --experimental-strip-types --check src/taste-evaluator.ts && node --experimental-strip-types --check src/taste-runner.ts && node --experimental-strip-types --check src/pilot.ts"
+    "typecheck": "node --experimental-strip-types --check src/runner.ts && node --experimental-strip-types --check src/taste.ts && node --experimental-strip-types --check src/taste-evaluator.ts && node --experimental-strip-types --check src/taste-runner.ts && node --experimental-strip-types --check src/pilot.ts",
+    "ci:policy": "node .github/ci-policy.mjs",
+    "merge:policy": "node .github/merge-policy.mjs"
   }
 }

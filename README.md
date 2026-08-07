@@ -65,6 +65,14 @@ panel calibration, coverage-gap and discriminant/incremental-validity studies,
 independent real-world outcome validation, and efficiency instrumentation
 remain required before making a broad Taste claim.
 
+## CI boundary
+
+Pull-request and merge-queue lanes validate only the candidate-agnostic
+contract, schema, metric/verifier behavior, typecheck, and repository security
+policy. They do not execute candidate code or activate the benchmark. Dataset,
+metric, verifier, validity, schema, workflow, dependency, and provenance
+changes are protected paths and require the code-owner lane.
+
 Run the foundation checks with:
 
 ```text
