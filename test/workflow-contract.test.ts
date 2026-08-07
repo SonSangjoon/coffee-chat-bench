@@ -36,3 +36,11 @@ test("the auto-merge controller is trusted and never executes candidate code", a
   assert.match(source, /merge-policy\.json\?ref=main/);
   assert.doesNotMatch(source, /actions\/(?:checkout|setup-node)@/);
 });
+
+test("the secret scan fetches the complete history for pull-request diffs", async () => {
+  const source = await readFile(join(workflowRoot, "security.yml"), "utf8");
+  assert.match(
+    source,
+    /secret-scan:[\s\S]*?uses: actions\/checkout@[0-9a-f]{40}[\s\S]*?fetch-depth: 0[\s\S]*?uses: gitleaks\/gitleaks-action@/,
+  );
+});
